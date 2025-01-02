@@ -1,13 +1,13 @@
 package org.team_alilm.application.service
 
 import com.fasterxml.jackson.databind.JsonNode
+import domain.product.Store
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import org.team_alilm.application.port.`in`.use_case.product.crawling.ProductCrawlingUseCase
-import org.team_alilm.domain.product.Store
 import org.team_alilm.global.error.NotFoundProductException
-import org.team_alilm.global.util.StringContextHolder
+import util.StringContextHolder
 import java.net.URI
 
 @Service
@@ -19,14 +19,39 @@ class AblyProductCrawlingService(
 
     override fun crawling(command: ProductCrawlingUseCase.ProductCrawlingCommand): ProductCrawlingUseCase.CrawlingResult {
         val productNumber = getProductNumber(command.url)
+        val aNonymousToken = restClient.get()
+            .uri(StringContextHolder.ABLY_ANONYMOUS_TOKEN_API_URL.get())
+            .accept(MediaType.APPLICATION_JSON)
+            .retrieve()
+            .body(JsonNode::class.java)
+            ?.get("token")
+            ?.asText() ?: throw IllegalArgumentException("익명 토큰을 가져올 수 없습니다.")
+
+        log.info("productNumber: $productNumber, aNonymousToken: $aNonymousToken")
 
         // https://m.a-bly.com/goods/34883322
-        val productDetails = getProductDetails(productNumber)
-        log.info("productDetails: $productDetails")
+        val productDetails = getProductDetails(
+            productNumber = productNumber,
+//            aNonymousToken = aNonymousToken
+        )
 
-        val firstOptions = getProductOptions(productNumber, 1, null) ?: throw NotFoundProductException()
-        val secondOptions = getProductOptions(productNumber, 2, firstOptions.get("option_components")?.first()?.get("goods_option_sno")?.asLong())
-        val thirdOptions = getProductOptions(productNumber, 3, secondOptions?.get("option_components")?.first()?.get("goods_option_sno")?.asLong())
+        val firstOptions = getProductOptions(
+            productNumber = productNumber,
+            optionDepth = 1, selectedOptionSno = null,
+//            aNonymousToken = aNonymousToken
+        ) ?: throw NotFoundProductException()
+        val secondOptions = getProductOptions(
+            productNumber = productNumber,
+            optionDepth = 2,
+            selectedOptionSno = firstOptions.get("option_components")?.first()?.get("goods_option_sno")?.asLong(),
+//            aNonymousToken = aNonymousToken
+        )
+        val thirdOptions = getProductOptions(
+            productNumber = productNumber,
+            optionDepth = 3,
+            selectedOptionSno = secondOptions?.get("option_components")?.first()?.get("goods_option_sno")?.asLong(),
+//            aNonymousToken = aNonymousToken
+        )
 
         return ProductCrawlingUseCase.CrawlingResult(
             number = productDetails?.get("goods")?.get("sno")?.asLong() ?: throw IllegalArgumentException("상품 정보를 가져올 수 없습니다."),
@@ -38,7 +63,7 @@ class AblyProductCrawlingService(
             secondCategory = null,
             price = productDetails.get("goods")?.get("first_page_rendering")?.get("original_price")?.asInt() ?: throw IllegalArgumentException("상품 정보를 가져올 수 없습니다."),
             store = Store.A_BLY,
-            firstOptions = firstOptions?.get("option_components")?.map { it.get("name")?.asText() ?: "" } ?: emptyList(),
+            firstOptions = firstOptions.get("option_components")?.map { it.get("name")?.asText() ?: "" } ?: emptyList(),
             secondOptions = secondOptions?.get("option_components")?.map { it.get("name")?.asText() ?: "" } ?: emptyList(),
             thirdOptions = thirdOptions?.get("option_components")?.map { it.get("name")?.asText() ?: "" } ?: emptyList(),
         )
@@ -48,12 +73,15 @@ class AblyProductCrawlingService(
         return url.split("/").last().toLong()
     }
 
-    private fun getProductDetails(productNumber: Long): JsonNode? {
+    private fun getProductDetails(
+        productNumber: Long,
+//        aNonymousToken: String
+    ): JsonNode? {
         try {
             return restClient.get()
                 .uri(StringContextHolder.ABLY_PRODUCT_API_URL.get().format(productNumber))
                 .accept(MediaType.APPLICATION_JSON)
-                .header("X-Anonymous-Token", StringContextHolder.ABLY_ANONYMOUS_TOKEN.get())
+                .header("X-Anonymous-Token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhbm9ueW1vdXNfaWQiOiIzNDM0MTc5MDAiLCJpYXQiOjE3MzUyODYxMTh9.ox6qVAtKpbRuF6Yaqvn_kjDe0RTtV-fo9jJt_pLRFBA")
                 .retrieve()
                 .body(JsonNode::class.java)
         } catch (e: Exception) {
@@ -62,22 +90,25 @@ class AblyProductCrawlingService(
         }
     }
 
-    private fun getProductOptions(productNumber: Long, optionDepth: Int, selectedOptionSno: Long?): JsonNode? {
-        log.info("productNumber: $productNumber, optionDepth: $optionDepth, selectedOptionSno: $selectedOptionSno")
-        log.info("url: ${StringContextHolder.ABLY_PRODUCT_OPTIONS_API_URL.get().format(productNumber, optionDepth)}")
-        try {
-            return restClient.get()
+    private fun getProductOptions(
+        productNumber: Long,
+        optionDepth: Int,
+        selectedOptionSno: Long?,
+//        aNonymousToken: String
+    ): JsonNode? {
+        return try {
+            restClient.get()
                 .uri {
                     val uri = StringContextHolder.ABLY_PRODUCT_OPTIONS_API_URL.get().format(productNumber, optionDepth)
                     val selectedOptionParam = selectedOptionSno?.let { "&selected_option_sno=$it" } ?: ""
                     URI(uri + selectedOptionParam)
                 }
                 .accept(MediaType.APPLICATION_JSON)
-                .header("X-Anonymous-Token", StringContextHolder.ABLY_ANONYMOUS_TOKEN.get())
+                .header("X-Anonymous-Token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhbm9ueW1vdXNfaWQiOiIzNDM0MTc5MDAiLCJpYXQiOjE3MzUyODYxMTh9.ox6qVAtKpbRuF6Yaqvn_kjDe0RTtV-fo9jJt_pLRFBA")
                 .retrieve()
                 .body(JsonNode::class.java)
         } catch (e: Exception) {
-            log.error("Error while fetching product options: ${e.message}")
+            log.info("Error while fetching product options: ${e.message}")
             return null
         }
     }
