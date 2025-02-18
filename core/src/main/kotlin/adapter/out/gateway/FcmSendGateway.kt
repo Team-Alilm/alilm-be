@@ -28,25 +28,57 @@ class FcmSendGateway(
 
         val messageBuilder = Message.builder()
             .setToken(fcmToken.token)
+            .putData("title", title)
+            .putData("body", body)
+            .putData("image", product.thumbnailUrl)
+            .putData("click_action", product.localServiceUrl())
 
-        when (platform) {
-            "web" -> {
-                messageBuilder.setWebpushConfig(
-                    WebpushConfig.builder()
-                        .setNotification(
-                            WebpushNotification.builder()
-                                .setTitle(title)
-                                .setBody(body)
-                                .setImage(product.thumbnailUrl)
-                                .build()
-                        )
-                        .build()
-                )
-                    .putData("click_action", product.localServiceUrl())
-            }
-        }
+            .setAndroidConfig(
+                AndroidConfig.builder()
+                    .setPriority(AndroidConfig.Priority.HIGH)
+                    .setNotification(
+                        AndroidNotification.builder()
+                            .setTitle(title)
+                            .setBody(body)
+                            .setImage(product.thumbnailUrl)
+                            .setClickAction(product.localServiceUrl())
+                            .build()
+                    )
+                    .build()
+            )
+
+            .setApnsConfig(
+                ApnsConfig.builder()
+                    .setAps(
+                        Aps.builder()
+                            .setAlert(
+                                ApsAlert.builder()
+                                    .setTitle(title)
+                                    .setBody(body)
+                                    .build()
+                            )
+                            .setBadge(1)
+                            .setSound("default")
+                            .setMutableContent(true)
+                            .setCategory("product")
+                            .build()
+                    )
+                    .putCustomData("image", product.thumbnailUrl)
+                    .putCustomData("click_action", product.localServiceUrl())
+                    .build()
+            )
+
+            .setNotification(
+                Notification.builder()
+                    .setTitle(title)
+                    .setBody(body)
+                    .setImage(product.thumbnailUrl)
+                    .build()
+            )
 
         val message = messageBuilder.build()
+
+
 
         try {
             firebaseMessaging.send(message)
