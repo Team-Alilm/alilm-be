@@ -68,17 +68,21 @@ class FcmSendGateway(
                     .build()
             )
 
-            .setNotification(
-                Notification.builder()
-                    .setTitle(title)
-                    .setBody(body)
-                    .setImage(product.thumbnailUrl)
+            .setWebpushConfig(
+                WebpushConfig.builder()
+                    .setNotification(
+                        WebpushNotification.builder()
+                            .setTitle(title)
+                            .setBody(body)
+                            .setIcon(product.thumbnailUrl)
+                            .build()
+                    )
+                    .putData("image", product.thumbnailUrl)
+                    .putData("click_action", product.localServiceUrl())
                     .build()
             )
 
         val message = messageBuilder.build()
-
-
 
         try {
             firebaseMessaging.send(message)

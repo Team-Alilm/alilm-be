@@ -77,5 +77,4 @@ class SecurityConfig (
 
         return http.build()
     }
-
 }
